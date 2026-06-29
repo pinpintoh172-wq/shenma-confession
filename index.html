@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>神马 Confession 墙</title>
+    <style>
+        body { font-family: sans-serif; background: #f4f4f9; padding: 20px; text-align: center; }
+        .container { max-width: 500px; margin: 0 auto; background: white; padding: 30px; border-radius: 12px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); }
+        textarea { width: 100%; height: 120px; margin-bottom: 15px; padding: 10px; box-sizing: border-box; border: 1px solid #ccc; border-radius: 8px; resize: none; font-size: 16px; }
+        input[type="file"] { margin-bottom: 20px; }
+        button { background: #6b46c1; color: white; border: none; padding: 12px 24px; border-radius: 8px; font-size: 16px; cursor: pointer; width: 100%; font-weight: bold; }
+        button:hover { background: #553c9a; }
+        #status { margin-top: 15px; font-weight: bold; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h2>🤫 神马匿名墙</h2>
+        <p style="color: #666; font-size: 14px;">在这里写下你的秘密。不记录 IP，完全匿名。</p>
+        
+        <form id="confessForm">
+            <textarea id="text" placeholder="你想说的话 (必填)..." required></textarea>
+            <br>
+            <div style="text-align: left; font-size: 14px; margin-bottom: 5px; color: #555;">上传图片（选填）：</div>
+            <input type="file" id="image" accept="image/*">
+            <br>
+            <button type="submit">匿名发送</button>
+        </form>
+        <p id="status"></p>
+    </div>
+
+    <script>
+        document.getElementById('confessForm').addEventListener('submit', async (e) => {
+            e.preventDefault(); 
+            const status = document.getElementById('status');
+            const btn = document.querySelector('button');
+            
+            status.style.color = "#666";
+            status.innerText = "发送中，请稍候...";
+            btn.disabled = true;
+
+            const formData = new FormData();
+            formData.append('text', document.getElementById('text').value);
+            
+            const imageFile = document.getElementById('image').files[0];
+            if(imageFile) formData.append('image', imageFile);
+
+            try {
+                const response = await fetch('/submit', { method: 'POST', body: formData });
+                const result = await response.json();
+                status.style.color = "#28a745";
+                status.innerText = result.message;
+                document.getElementById('confessForm').reset(); 
+            } catch (error) {
+                status.style.color = "red";
+                status.innerText = "发送失败，请重试。";
+            } finally {
+                btn.disabled = false;
+            }
+        });
+    </script>
+</body>
+</html>
