@@ -48,6 +48,8 @@ app.get('/api/messages', (req, res) => {
   res.json(data.reverse()); 
 });
 
-app.listen(port, () => {
-  console.log(`🚀 服务器已启动！`);
+const PORT = process.env.PORT || 3000;
+
+app.listen(PORT, () => {
+    console.log(`🚀 服务器已启动！正在监听端口：${PORT}`);
 });
