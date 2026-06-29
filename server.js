@@ -4,52 +4,87 @@ const fs = require('fs');
 const path = require('path');
 
 const app = express();
-const port = 3000;
+// 【关键修改1】告诉 multer：不要存进本地文件夹了，先把图片存在内存里交给我
+const upload = multer({ storage: multer.memoryStorage() }); 
 
-const storage = multer.diskStorage({
-  destination: function (req, file, cb) {
-    const uploadPath = './public/uploads/';
-    if (!fs.existsSync(uploadPath)) fs.mkdirSync(uploadPath, { recursive: true });
-    cb(null, uploadPath);
-  },
-  filename: function (req, file, cb) {
-    cb(null, Date.now() + path.extname(file.originalname)); 
-  }
-});
-const upload = multer({ storage: storage });
-
-app.use(express.static('public'));
 app.use(express.json());
+app.use(express.static('public'));
 
-const dbPath = './data.json';
-if (!fs.existsSync(dbPath)) fs.writeFileSync(dbPath, '[]');
+const DATA_FILE = path.join(__dirname, 'data.json');
 
-// 接收投稿的接口
-app.post('/submit', upload.single('image'), (req, res) => {
-  const data = JSON.parse(fs.readFileSync(dbPath));
-  const newId = data.length + 1; 
+const getMessages = () => {
+    if (!fs.existsSync(DATA_FILE)) return [];
+    try {
+        return JSON.parse(fs.readFileSync(DATA_FILE));
+    } catch (e) {
+        return [];
+    }
+};
 
-  const newConfession = {
-    id: newId, 
-    text: req.body.text || "（没有输入文字）",
-    image: req.file ? `/uploads/${req.file.filename}` : null,
-    time: new Date().toLocaleString() 
-  };
-  
-  data.push(newConfession);
-  fs.writeFileSync(dbPath, JSON.stringify(data, null, 2));
-  res.send({ message: `提交成功！你是第 ${newId} 号投稿🤫` });
-});
+const saveMessages = (data) => {
+    fs.writeFileSync(DATA_FILE, JSON.stringify(data, null, 2));
+};
 
-// 👇【这是为你新增的接口】让管理员网页可以获取所有留言数据
 app.get('/api/messages', (req, res) => {
-  const data = JSON.parse(fs.readFileSync(dbPath));
-  // 把数据倒序排列（最新的排在最前面）
-  res.json(data.reverse()); 
+    res.json(getMessages());
 });
 
-const PORT = process.env.PORT || 3000;
+// 【关键修改2】全新的发帖逻辑：接通 ImgBB API
+app.post('/api/messages', upload.single('image'), async (req, res) => {
+    try {
+        const { text } = req.body;
+        let imageUrl = null;
 
+        // 如果同学上传了图片
+        if (req.file) {
+            // 将图片转换成一段超长的文本（Base64格式），这是 API 要求的格式
+            const base64Image = req.file.buffer.toString('base64');
+            
+            // 你的 ImgBB 专属相册钥匙
+            const API_KEY = '426e0569b926fd522ffcebffc5571495';
+            
+            // 打包数据
+            const formData = new URLSearchParams();
+            formData.append('image', base64Image);
+
+            // 让服务器自动帮你把图片发给 ImgBB
+            const imgbbResponse = await fetch(`https://api.imgbb.com/1/upload?key=${API_KEY}`, {
+                method: 'POST',
+                body: formData
+            });
+            
+            const imgbbResult = await imgbbResponse.json();
+            
+            if (imgbbResult.success) {
+                // 上传成功！拿回图片的永久网址
+                imageUrl = imgbbResult.data.url; 
+            }
+        }
+
+        const messages = getMessages();
+        const newId = messages.length > 0 ? messages[0].id + 1 : 1;
+
+        // 保存留言信息（注意：现在的 image 存的是永久网址了！）
+        const newMessage = {
+            id: newId,
+            text: text,
+            image: imageUrl, 
+            time: new Date().toLocaleString('zh-CN', { timeZone: 'Asia/Kuala_Lumpur' })
+        };
+
+        messages.unshift(newMessage);
+        saveMessages(messages);
+
+        res.json({ success: true, message: newMessage });
+
+    } catch (error) {
+        console.error('服务器错误:', error);
+        res.status(500).json({ success: false, error: '服务器出了点小问题' });
+    }
+});
+
+// 让服务器优先听从云端的端口安排
+const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
     console.log(`🚀 服务器已启动！正在监听端口：${PORT}`);
 });
